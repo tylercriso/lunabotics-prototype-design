@@ -1,0 +1,96 @@
+:root {
+  --bg: #0e1116;
+  --panel: rgba(18, 22, 30, 0.92);
+  --fg: #e6e9ef;
+  --muted: #8b94a7;
+  --accent: #ffb020;
+  --accent-2: #3da5ff;
+  --border: #2a3140;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--fg);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+#viewport {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#panel {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 300px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  backdrop-filter: blur(6px);
+  font-size: 13px;
+}
+
+#panel h1 { font-size: 16px; margin: 0; }
+#panel .sub { margin: 2px 0 10px; color: var(--muted); font-size: 12px; }
+#panel h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+#panel section { border-top: 1px solid var(--border); padding-top: 4px; }
+#panel section:first-of-type { border-top: none; }
+
+.buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.buttons button {
+  background: #1b212c;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.buttons button:hover { border-color: var(--accent-2); }
+.buttons button.active {
+  background: var(--accent);
+  color: #1a1200;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.desc { color: var(--muted); font-size: 12px; min-height: 2.6em; margin: 8px 0 0; }
+
+label { display: block; margin: 6px 0; color: var(--fg); }
+label span { float: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; margin: 4px 0 0; accent-color: var(--accent); }
+label.check { display: flex; align-items: center; gap: 8px; }
+label.check input { accent-color: var(--accent); }
+
+.specs table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.specs td { padding: 3px 0; vertical-align: top; }
+.specs td:first-child { color: var(--muted); width: 48%; }
+.hint { color: var(--muted); font-size: 11px; margin: 10px 0 0; }
+
+.label {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lunabotics Bucket-Ladder Excavator – 3D Preview</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="viewport"></canvas>
+
+    <aside id="panel">
+      <h1>Bucket-Ladder Excavator</h1>
+      <p class="sub">NASA Lunabotics 2026–27 concept preview</p>
+
+      <section>
+        <h2>Operation mode</h2>
+        <div id="modes" class="buttons"></div>
+        <p id="mode-desc" class="desc"></p>
+      </section>
+
+      <section>
+        <h2>Manual pose</h2>
+        <label>Ladder angle <span id="ladder-val"></span>
+          <input id="ladder" type="range" min="-170" max="-40" step="1" />
+        </label>
+        <label>Bed tilt <span id="bed-val"></span>
+          <input id="bed" type="range" min="0" max="55" step="1" />
+        </label>
+        <label>Gate open <span id="gate-val"></span>
+          <input id="gate" type="range" min="0" max="100" step="1" />
+        </label>
+        <label>Track speed <span id="speed-val"></span>
+          <input id="speed" type="range" min="0" max="100" step="1" />
+        </label>
+        <label>Hopper fill <span id="fill-val"></span>
+          <input id="fill" type="range" min="0" max="100" step="1" />
+        </label>
+      </section>
+
+      <section>
+        <h2>View</h2>
+        <label class="check"><input id="envelope" type="checkbox" /> Show 150×75×75 cm stowed envelope</label>
+        <label class="check"><input id="labels" type="checkbox" /> Show component labels</label>
+        <label class="check"><input id="wire" type="checkbox" /> Wireframe</label>
+      </section>
+
+      <section class="specs">
+        <h2>Key dimensions</h2>
+        <table>
+          <tr><td>Stowed L×W×H</td><td>≈ 106 × 72 × 72 cm</td></tr>
+          <tr><td>Envelope limit</td><td>150 × 75 × 75 cm</td></tr>
+          <tr><td>Deployed height</td><td>≈ 160 cm (mast) / limit 250</td></tr>
+          <tr><td>Mass target</td><td>≈ 62 kg / limit 80</td></tr>
+          <tr><td>Hopper volume</td><td>≈ 52 L nominal</td></tr>
+          <tr><td>Ladder reach</td><td>≈ 60 cm fwd, 8 cm cut depth</td></tr>
+          <tr><td>Track width</td><td>12 cm each, rigid cleats</td></tr>
+        </table>
+        <p class="hint">Drag to orbit · wheel to zoom · right-drag to pan</p>
+      </section>
+    </aside>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
