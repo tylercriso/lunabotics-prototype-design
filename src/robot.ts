@@ -55,12 +55,14 @@ export const D = {
   bedY0: 0.20,
   bedH: 0.22,
   bedZ: 0.25,
-  ladderPivot: new THREE.Vector3(0.30, 0.60, 0),
-  ladderLen: 0.62,
+  // Pivot lowered so the stowed ladder (buckets up) tops out at 73 cm < 75 cm envelope;
+  // ladder lengthened so −45° reaches ~10 cm below grade with the bucket tip 25 cm ahead of the tracks.
+  ladderPivot: new THREE.Vector3(0.30, 0.56, 0),
+  ladderLen: 0.70,
   ladderR: 0.06, // chain sprocket radius
   ladderZ: 0.14, // half-width of ladder rails
   bucketN: 7,
-  mastPos: new THREE.Vector3(-0.50, 0, -0.30),
+  mastPos: new THREE.Vector3(-0.50, 0, -0.33), // outboard of the hopper sidewall + rib (z −0.27)
 };
 
 export const STOWED_ENVELOPE = { l: 1.5, w: 0.75, h: 0.75 };
@@ -359,11 +361,12 @@ export class Robot extends THREE.Group {
     this.labels.push(label('Battery (48 V LiFePO₄)', new THREE.Vector3(0.08, deck + 0.19, 0.09)));
     this.add(box(0.18, 0.10, 0.16, M.aluDark, 0.08, deck + 0.05, -0.14));
     this.labels.push(label('Avionics + motor controllers', new THREE.Vector3(0.08, deck + 0.17, -0.2)));
-    this.add(box(0.07, 0.04, 0.05, M.white, 0.26, deck + 0.02, -0.19));
-    this.add(box(0.012, 0.012, 0.004, M.green, 0.26, deck + 0.03, -0.164));
-    this.labels.push(label('COTS power logger (battery → logger → E-stop)', new THREE.Vector3(0.26, deck + 0.1, -0.19)));
-    this.add(strut(new THREE.Vector3(0.18, deck + 0.08, 0.02), new THREE.Vector3(0.245, deck + 0.04, -0.17), 0.004, M.red));
-    this.add(strut(new THREE.Vector3(0.28, deck + 0.04, -0.18), new THREE.Vector3(0.36, deck + 0.03, 0.17), 0.004, M.red));
+    // Logger rides the front tower strut at ~0.5 m so a judge can read/remove it standing (§13.1.1).
+    this.add(box(0.07, 0.04, 0.05, M.white, 0.33, 0.50, 0.23));
+    this.add(box(0.012, 0.012, 0.004, M.green, 0.33, 0.51, 0.256));
+    this.labels.push(label('COTS power logger (battery → logger → E-stop)', new THREE.Vector3(0.33, 0.58, 0.30)));
+    this.add(strut(new THREE.Vector3(0.18, deck + 0.08, 0.02), new THREE.Vector3(0.33, 0.48, 0.21), 0.004, M.red));
+    this.add(strut(new THREE.Vector3(0.33, 0.52, 0.21), new THREE.Vector3(0.30, 0.62, -0.20), 0.004, M.red));
 
     // ---- ladder tower (A-frame) + pivot bearings + slew gearmotor ----
     const P = D.ladderPivot;
@@ -385,18 +388,32 @@ export class Robot extends THREE.Group {
     const slewMotor = cyl(0.03, 0.12, M.black, 'x');
     slewMotor.position.set(P.x - 0.105, P.y, -(tz + 0.045));
     this.add(slewBox, slewMotor);
-    this.labels.push(label('Ladder slew: worm gearmotor (225° travel)', new THREE.Vector3(P.x, P.y + 0.1, -tz - 0.05)));
+    this.labels.push(label('Ladder slew: worm gearmotor (−60°…180°)', new THREE.Vector3(P.x - 0.15, P.y + 0.05, -tz - 0.05)));
+
+    // ---- E-stop: 40 mm red mushroom on top of the slew housing — highest fixed point, clear of the stowed ladder ----
+    const es = new THREE.Group();
+    es.add(box(0.07, 0.05, 0.07, M.yellow, 0, 0.025, 0));
+    const stem = cyl(0.012, 0.025, M.black, 'y');
+    stem.position.y = 0.06;
+    const cap = cyl(0.02, 0.018, M.red, 'y');
+    cap.position.y = 0.082;
+    es.add(stem, cap);
+    es.position.set(P.x, P.y + 0.045, -(tz + 0.045));
+    this.add(es);
+    this.labels.push(label('E-stop (Ø40 mm, highest fixed point, unobstructed)', new THREE.Vector3(P.x, P.y + 0.24, -tz - 0.05)));
 
     // ---- ladder ----
     this.ladderPivot.position.copy(P);
     this.ladderPivot.add(this.ladder);
     this.add(this.ladderPivot);
-    this.labels.push(label('Bucket-ladder: 7 buckets, dual roller chain', new THREE.Vector3(0.45, -0.05, 0)));
+    this.labels.push(label('Bucket-ladder: 7 buckets, dual roller chain, 0–15 cm dig depth', new THREE.Vector3(0.45, -0.05, 0)));
     this.ladder.add(this.labels[this.labels.length - 1]);
 
     // ---- transfer chute under top sprocket, sloping back into hopper ----
-    const chuteLen = 0.33, chuteAng = 0.17;
-    const cx = 0.095, cy = 0.445;
+    // Shortened so the bucket swing circle (r ≈ 0.14 about the pivot) clears it. Slope is only ~10°:
+    // marginal for cohesive BP-1 — see README "Open design trades".
+    const chuteLen = 0.24, chuteAng = 0.17;
+    const cx = 0.05, cy = 0.445;
     const chute = box(chuteLen, 0.006, D.ladderZ * 2 + 0.02, M.aluDark, cx, cy, 0);
     chute.rotation.z = chuteAng;
     this.add(chute);
@@ -453,21 +470,9 @@ export class Robot extends THREE.Group {
     }
     this.labels.push(label('Marked lifting point ×4', new THREE.Vector3(fx1 - 0.07, fy + 0.12, fz)));
 
-    // ---- E-stop: 40 mm red mushroom, top-mounted ----
-    const es = new THREE.Group();
-    es.add(box(0.07, 0.05, 0.07, M.yellow, 0, 0.025, 0));
-    const stem = cyl(0.012, 0.025, M.black, 'y');
-    stem.position.y = 0.06;
-    const cap = cyl(0.02, 0.018, M.red, 'y');
-    cap.position.y = 0.082;
-    es.add(stem, cap);
-    es.position.set(0.37, deck, 0.19);
-    this.add(es);
-    this.labels.push(label('E-stop (Ø40 mm, unobstructed)', new THREE.Vector3(0.37, deck + 0.2, 0.19)));
-
-    // ---- telescoping sensor mast (rear-left, clear of ladder sweep) ----
+    // ---- telescoping sensor mast (rear-left, clear of ladder sweep and hopper) ----
     const mp = D.mastPos;
-    this.add(box(0.06, 0.025, 0.10, M.aluDark, mp.x, fy + 0.0325, mp.z + 0.02));
+    this.add(box(0.06, 0.025, 0.08, M.aluDark, mp.x, fy + 0.0325, mp.z + 0.01));
     const mastBase = cyl(0.025, 0.26, M.alu, 'y');
     mastBase.position.set(mp.x, fy + 0.045 + 0.13, mp.z);
     this.add(mastBase);
@@ -485,10 +490,20 @@ export class Robot extends THREE.Group {
       lens.position.set(0.055, -0.055, z);
       this.mastHead.add(lens);
     }
-    const ant = cyl(0.004, 0.08, M.black, 'y');
-    ant.position.set(-0.03, 0.07, 0);
-    this.mastHead.add(ant);
-    const headLabel = label('3D LiDAR + stereo cameras + 2.4/5 GHz radio', new THREE.Vector3(0, 0.16, 0));
+    // Rear camera: the robot reverses to dump, and the starting-zone fiducials (§13.7.2) are behind it in transit.
+    const rearCam = cyl(0.012, 0.02, M.lens, 'x');
+    rearCam.position.set(-0.03, -0.055, 0);
+    this.mastHead.add(rearCam);
+    // 2×2 MIMO Wi‑Fi client lives on the mast head (Ethernet down the mast, no coax loss);
+    // two dipoles spaced ~λ/2 at 2.4 GHz for spatial diversity on the forced 20 MHz Channel 1.
+    const radio = box(0.05, 0.02, 0.09, M.aluDark, -0.04, 0.045, 0);
+    this.mastHead.add(radio);
+    for (const z of [-0.06, 0.06]) {
+      const ant = cyl(0.004, 0.08, M.black, 'y');
+      ant.position.set(-0.04, 0.095, z);
+      this.mastHead.add(ant);
+    }
+    const headLabel = label('3D LiDAR + stereo + rear camera + 2×2 MIMO 2.4/5 GHz radio', new THREE.Vector3(0, 0.18, 0));
     this.mastHead.add(headLabel);
     this.labels.push(headLabel);
     this.add(this.mastHead);

@@ -28,15 +28,62 @@ Open the printed URL. `npm run build` type-checks and bundles to `dist/`.
 | Subsystem | Design |
 | --- | --- |
 | Mobility | Tracked skid-steer, 2 × BLDC gearmotors, rigid steel cleats on a compliant belt (no pneumatic tires) |
-| Excavation | Bucket ladder: 7 buckets on dual roller chain, 62 cm rails, worm-gear slew at the pivot (−48° dig → 180° stow) |
-| Transfer | Buckets invert over the top sprocket into a sloped chute feeding the hopper (no bulldozing) |
-| Hopper / dump | ~50 L tip bed, rear hinge, 2 × electric linear actuators, actuator-lifted rear gate |
-| Sensing | Telescoping rear mast: 3D LiDAR, stereo camera pair, 2.4/5 GHz radio |
-| Safety | Top-mounted Ø40 mm red E-stop, 4 marked lifting eyes, COTS power logger wired battery → logger → E-stop |
+| Excavation | Bucket ladder: 7 buckets on dual roller chain, 70 cm rails, worm-gear slew at a 56 cm pivot (−60° … 180°). −45° cuts ≈ 10 cm below grade, −60° ≈ 15 cm, bucket tip ≥ 25 cm ahead of the tracks |
+| Transfer | Buckets invert over the top sprocket into a short chute feeding the hopper (no bulldozing) — chute slope is an open trade, see below |
+| Hopper / dump | 55 L (geometric) tip bed, rear hinge, 2 × electric linear actuators, actuator-lifted rear gate |
+| Sensing / comms | Telescoping rear mast: 3D LiDAR, forward stereo pair, rear camera (reverse-to-dump, starting-zone fiducials), mast-head 2×2 MIMO 802.11 client (dual diversity antennas, Ethernet down the mast). Link must work with the mast stowed — setup starts in Stow. |
+| Safety | Ø40 mm red E-stop on top of the slew housing (highest fixed point, outboard of the stowed ladder), 4 marked lifting eyes, COTS power logger on the tower strut at ~0.5 m wired battery → logger → E-stop |
 
-Stowed footprint ≈ 106 × 72 × 72 cm inside the 150 × 75 × 75 cm limit; deployed mast ≈ 160 cm
+Stowed footprint ≈ 106 × 74 × 73 cm inside the 150 × 75 × 75 cm limit; deployed mast ≈ 160 cm
 (limit 250 cm); mass budget ≈ 62 kg (limit 80 kg).
 
 The geometry is a dimensioned concept, not fabrication CAD. Motor sizing, tooth forces,
 tip stability, dust sealing, and controls need independent engineering. Model code lives
 in `src/robot.ts`; scene, modes, and UI in `src/main.ts`.
+
+## Guidebook review (2026–27, rev 9‑17‑26)
+
+Where the points are, per 15‑min run: autonomy up to **1400** (travel 500 / excavation 200 / dump 100;
+1000 for all cycles automated; 1400 for hands‑free from the starting zone with ≥ 2 full cycles — all
+× a berm multiplier that is 1.0 only above 25 L), BCP‑mass ≈ 4.4 × cm³ / 15 / kg (~350), BCP‑energy
+≈ 1.5 × cm³ / 15 / Wh (~215), bandwidth up to 120 (zero above 4 Mbps incl. 0.5 Mbps per arena
+camera), dust‑tolerant design 30, dust‑free operation 30, obstacle penalty up to −100.
+The mechanical design should therefore optimise for **repeatable short autonomous cycles**,
+low mass and energy, and dust control — not peak hopper volume.
+
+### Fixed in this revision
+
+| § | Rule | Was | Now |
+| --- | --- | --- | --- |
+| 13.3.1 | Stowed envelope ≤ 150 × 75 × 75 cm | Ladder stowed buckets‑up topped out at **77 cm** | Pivot lowered 60 → 56 cm; stowed height 73 cm |
+| 13.2.4–6 | E‑stop at the highest location, reachable without reaching over/around | On the front deck at ~30 cm, under the A‑frame | On top of the slew gearbox at ~70 cm, outboard corner, clear of the stowed ladder |
+| 13.1.1 | Power logger reachable without kneeling | On the deck at ~25 cm | On the front tower strut at ~50 cm, display outboard |
+| 13.9.8 / 17.1 | Excavation must actually acquire regolith | −48° max slew gave a **3 cm** cut; −65° put the bucket tip into the track | 70 cm ladder: −45° → 10 cm, −60° → 15 cm, tip ≥ 25 cm ahead of the tracks |
+| 14.1 | Single 802.11 link, 20 MHz on Ch 1, no amplification, no backchannels | Single stub antenna | 2×2 MIMO client on the mast head, Ethernet down the mast; no second radio (nothing else can reach the MCC) |
+| 16.2 / 13.7.2 | Dump localisation; fiducials allowed on the starting‑zone frame | Forward stereo only | Rear camera on the mast head |
+| — | Model interference | Mast bracket intersected the hopper sidewall/rib | Mast moved outboard to z = −33 cm |
+
+### Open design trades (need a decision)
+
+1. **Hopper payload.** 55 L of loosened BP‑1 is ≈ 60–85 kg — more than the 62 kg robot. That drives
+   actuator force, frame stress, tip‑over margin at 50° tilt, track ground pressure and drive energy.
+   Full autonomy only needs ≥ 2 complete cycles and the berm multiplier saturates at 25 L; a
+   **30–35 L** hopper filled in ~1.5–2 min gives 3–4 cycles, a lighter frame and smaller actuators,
+   with similar total berm volume. Recommend shrinking (e.g. bed height 22 → 14 cm).
+2. **Transfer chute.** With the hopper front wall at 42 cm and the bucket swing circle under the pivot,
+   a gravity chute can only slope ~10°. BP‑1 is a cohesive silty powder (angle of repose > 35°); it
+   will bridge on a 10° aluminium chute. Options: (a) drop the hopper front wall and steepen the chute
+   to ≥ 40°; (b) move the hopper forward so buckets discharge straight into it and relocate
+   battery/avionics; (c) replace the tip bed with a **belt‑floor hopper** that discharges rearward —
+   no chute, no tip actuators, lower CG, handles cohesive material. (c) pairs naturally with (1).
+3. **Dust points (60 total).** Exposed roller chain, open sprockets and bare actuator rods forfeit most
+   of the 30 dust‑tolerant points. Add: chain‑run covers with buckets outside, labyrinth/felt seals on
+   drive and slew gearboxes, bellows on the linear actuators (10 pts), and a lunar‑plausible brush or
+   wiper for the LiDAR/camera windows (5 pts "active dust control" — no compressed air, §13.8.1).
+   A spill tray under the top sprocket protects "transfer without dumping on the robot" (5 pts).
+4. **Localisation.** No GPS/compass; walls usable only as detected features, not a‑priori. Plan on
+   self‑powered AprilTag boards clamped to the starting‑zone frame (mass counts toward 80 kg) seen by
+   the rear camera, plus LiDAR odometry. The autonomy review requires a live obstacle‑map + path
+   visualisation in the MCC.
+5. **Bandwidth.** Scoring wants < 1 Mbps average; stream one low‑rate compressed camera on demand,
+   send the LiDAR map as occupancy cells, not point clouds. Both arena cameras cost 1 Mbps.

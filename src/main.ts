@@ -17,7 +17,7 @@ interface Mode {
 const MODES: Mode[] = [
   {
     name: 'Stow',
-    desc: 'Inspection / start configuration: ladder folded back over the hopper, mast collapsed, bed flat. Fits the 150×75×75 cm envelope.',
+    desc: 'Inspection / start configuration: ladder folded back over the hopper, mast collapsed, bed flat. 106×74×73 cm inside the 150×75×75 cm envelope. Comms must come up in this pose (setup starts here).',
     pose: { ladderAngle: deg(180), bedTilt: 0, gate: 0, trackSpeed: 0, chainSpeed: 0, mast: 0, fill: 0 },
     berm: 0,
   },
@@ -29,8 +29,8 @@ const MODES: Mode[] = [
   },
   {
     name: 'Excavate',
-    desc: 'Ladder slewed down ~48° into BP-1. Bucket chain runs, robot creeps forward; buckets discharge over the top sprocket into the chute and hopper.',
-    pose: { ladderAngle: deg(-48), bedTilt: 0, gate: 0, trackSpeed: 0.04, chainSpeed: 1, mast: 1, fill: 1 },
+    desc: 'Ladder slewed down ~45° so the buckets cut ~10 cm below grade (slew to −60° for 15 cm). Bucket chain runs, robot creeps forward; buckets discharge over the top sprocket into the chute and hopper.',
+    pose: { ladderAngle: deg(-45), bedTilt: 0, gate: 0, trackSpeed: 0.04, chainSpeed: 1, mast: 1, fill: 1 },
     berm: null,
   },
   {
@@ -157,7 +157,7 @@ const sliders = {
   speed: document.getElementById('speed') as HTMLInputElement,
   fill: document.getElementById('fill') as HTMLInputElement,
 };
-sliders.ladder.min = '-50';
+sliders.ladder.min = '-60';
 sliders.ladder.max = '180';
 const vals = {
   ladder: document.getElementById('ladder-val')!,
