@@ -82,9 +82,12 @@ function box(w: number, h: number, d: number, mat: THREE.Material, x = 0, y = 0,
 }
 
 function cyl(r: number, len: number, mat: THREE.Material, axis: 'x' | 'y' | 'z' = 'z', seg = 24) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
-  if (axis === 'z') m.rotation.x = Math.PI / 2;
-  if (axis === 'x') m.rotation.z = Math.PI / 2;
+  // Orientation is baked into the geometry so a later `mesh.rotation.z += …` spins the cylinder
+  // about its own axle instead of tumbling it (Euler XYZ would compose the two rotations).
+  const g = new THREE.CylinderGeometry(r, r, len, seg);
+  if (axis === 'z') g.rotateX(Math.PI / 2);
+  if (axis === 'x') g.rotateZ(Math.PI / 2);
+  const m = new THREE.Mesh(g, mat);
   m.castShadow = m.receiveShadow = true;
   return m;
 }
@@ -251,8 +254,9 @@ class Track extends THREE.Group {
       c.rotation.z = Math.atan2(t.y, t.x);
     }
   }
+  /** `dist` = forward travel of the chassis; the ground run moves rearward relative to it. */
   advance(dist: number) {
-    this.phase = (this.phase + dist) % this.per;
+    this.phase = (((this.phase - dist) % this.per) + this.per) % this.per;
     for (const w of this.wheels) w.rotation.z -= dist / D.trackR;
     this.layout();
   }
@@ -341,7 +345,7 @@ class Ladder extends THREE.Group {
   }
   advance(dist: number) {
     this.phase = (this.phase + dist) % this.per;
-    for (const s of this.sprockets) s.rotation.z -= dist / D.ladderR;
+    for (const s of this.sprockets) s.rotation.z += dist / D.ladderR;
     this.layout();
   }
 }
