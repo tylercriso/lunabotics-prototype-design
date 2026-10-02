@@ -83,6 +83,14 @@ label.check input { accent-color: var(--accent); }
 .specs td { padding: 3px 0; vertical-align: top; }
 .specs td:first-child { color: var(--muted); width: 48%; }
 .hint { color: var(--muted); font-size: 11px; margin: 10px 0 0; }
+#version {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 
 .label {
   color: #fff;

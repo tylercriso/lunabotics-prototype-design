@@ -22,6 +22,7 @@ Open the printed URL. `npm run build` type-checks and bundles to `dist/`.
 - **View**: 150×75×75 cm stowed-envelope wireframe, component labels, wireframe shading
 - Drag to orbit, wheel to zoom, right-drag to pan
 - Deep-link: `?mode=Dump&snap&cam=-2.2,1.2,1.8&labels=1`
+- **Version footer** at the bottom of the panel shows `v<package.json version> · <git sha> · <build date>`, injected at build time. Bump `version` in `package.json` on each design revision so the live Pages site is identifiable.
 
 ## Concept
 

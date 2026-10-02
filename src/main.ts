@@ -261,6 +261,9 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// ---------- version footer (values injected at build time, see vite.config.ts) ----------
+document.getElementById('version')!.textContent = `Design rev v${__APP_VERSION__} · build ${__GIT_SHA__} · ${__BUILD_DATE__}`;
+
 // ---------- animation loop ----------
 const clock = new THREE.Clock();
 const RATES: Record<keyof RobotPose, number> = {
