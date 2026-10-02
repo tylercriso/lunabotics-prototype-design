@@ -24,6 +24,41 @@ Open the printed URL. `npm run build` type-checks and bundles to `dist/`.
 - Deep-link: `?mode=Dump&snap&cam=-2.2,1.2,1.8&labels=1`
 - **Version footer** at the bottom of the panel shows `v<package.json version> · <git sha> · <build date>`, injected at build time. Bump `version` in `package.json` on each design revision so the live Pages site is identifiable.
 
+## LiDAR demonstration (`lidar.html`)
+
+**Live:** https://tylercriso.github.io/lunabotics-prototype-design/lidar.html — linked from the previewer header.
+
+A second page that puts the same robot in the Artemis Arena and shows how a LiDAR
+"sees" it. Two demos share one scene and one sensor mount (the mast head, ~1.35 m):
+
+| Demo | What it shows |
+| --- | --- |
+| **2D LiDAR** | One spinning beam → one scan plane. Level at mast height it clears every boulder and the walls and only the column returns, so the default preset pitches it 20° down ("push-broom"): the plane cuts the floor in a line a few metres ahead and driving sweeps that line over rocks and craters to build the map. |
+| **3D LiDAR** | A stack of beams (e.g. 16 for a VLP‑16) spread over a vertical FOV, so a single revolution already returns a fan of rings on the floor, walls, column and obstacles. |
+
+- Beams are drawn from the sensor to the point they bounce off, coloured by what they hit
+  (regolith, crater, berm, boulder, column, wall, PVC pipe); switch **Colour by** to height or
+  return intensity. A slow-motion **time-of-flight** pulse travels along the centre beam with
+  the real round-trip time in nanoseconds (`2·d / c`).
+- **Presets** (RPLIDAR A1, Hokuyo UST‑10LX, SICK TiM571, Velodyne VLP‑16, Ouster OS1‑32,
+  Livox Mid‑360 approximation) seed the **sliders**: range, horizontal FOV, azimuth step,
+  spin rate, tilt, channels, vertical FOV and mast height. Beams per revolution / per second
+  and the return ratio update live.
+- The robot drives a hands-off slalom loop; **Randomise** re-rolls boulders and craters per the
+  §11 rules (none in the starting zone or construction zone, path kept clear). Keys: `1`/`2` demo,
+  `Space` pause, `R` randomise, `C` clear map. Deep-link: `?demo=3d&preset=1&cam=overview`.
+
+Arena per Guidebook §11 / Figure 9: 6.88 × 5 m interior, 2.5 m excavation zone with the 2 × 2 m
+starting zone, 4.38 m obstacle zone, ≈3 × 1.5 m construction zone with the 2.2 × 0.9 m berm box,
+permanent central column, 17 cm PVC pipe along the perimeter, ≥3 boulders 30–40 cm and ≥3
+craters ≤ 40–50 cm. Figure 9 obstacle positions are read off the drawing (±10 cm). Assumptions
+not in the guidebook: wall height 1 m; BP‑1 reflectivity ~0.1 (dark basalt, Fig. 7). Simplifications:
+analytic ray casting (heightfield + ellipsoid boulders + boxes), the robot masks its own beams as a
+plain box, the Mid‑360's non‑repetitive pattern is approximated by 40 fixed lines, and the 3D
+presets default to coarser azimuth columns than the real units (a JavaScript ray cast is ~1 µs,
+so a real VLP‑16's 288 k beams/s would stall the frame; a per-frame beam budget slows the head
+instead).
+
 ## Concept
 
 | Subsystem | Design |

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How LiDAR works – 2D vs 3D in the Artemis Arena</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="viewport"></canvas>
+
+    <aside id="panel">
+      <h1>How LiDAR works</h1>
+      <p class="sub">Artemis Arena per Guidebook §11 · <a class="nav" href="./index.html">← Robot previewer</a></p>
+
+      <section>
+        <h2>Demonstration</h2>
+        <div id="demos" class="buttons two"></div>
+        <p id="demo-desc" class="desc"></p>
+      </section>
+
+      <section>
+        <h2>Sensor</h2>
+        <label>Preset
+          <select id="preset"></select>
+        </label>
+        <p id="preset-note" class="desc"></p>
+        <label>Max range <span id="range-val"></span>
+          <input id="range" type="range" min="2" max="30" step="0.5" />
+        </label>
+        <label>Horizontal FOV <span id="hfov-val"></span>
+          <input id="hfov" type="range" min="30" max="360" step="5" />
+        </label>
+        <label>Azimuth step <span id="azstep-val"></span>
+          <input id="azstep" type="range" min="0.25" max="4" step="0.05" />
+        </label>
+        <label>Scan rate <span id="rate-val"></span>
+          <input id="rate" type="range" min="1" max="40" step="0.5" />
+        </label>
+        <label>Tilt (pitch) <span id="tilt-val"></span>
+          <input id="tilt" type="range" min="-60" max="20" step="1" />
+        </label>
+        <label class="only-3d">Vertical channels <span id="channels-val"></span>
+          <input id="channels" type="range" min="2" max="64" step="1" />
+        </label>
+        <label class="only-3d">Vertical FOV <span id="vfov-val"></span>
+          <input id="vfov" type="range" min="5" max="90" step="1" />
+        </label>
+        <label>Mast height <span id="mast-val"></span>
+          <input id="mast" type="range" min="0" max="100" step="1" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Robot tour</h2>
+        <div class="buttons">
+          <button id="play">Pause</button>
+          <button id="randomize">Randomise obstacles</button>
+          <button id="clear-map">Clear map</button>
+        </div>
+        <label>Drive speed <span id="speed-val"></span>
+          <input id="speed" type="range" min="0" max="100" step="1" />
+        </label>
+        <label class="check"><input id="follow" type="checkbox" checked /> Camera follows the robot</label>
+        <div class="buttons two">
+          <button id="cam-over">Overview camera</button>
+          <button id="cam-chase">Chase camera</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>View</h2>
+        <label class="check"><input id="show-rays" type="checkbox" checked /> Laser beams</label>
+        <label class="check"><input id="show-misses" type="checkbox" /> Beams with no return</label>
+        <label class="check"><input id="show-scan" type="checkbox" checked /> Current scan points</label>
+        <label class="check"><input id="show-map" type="checkbox" checked /> Accumulated map</label>
+        <label class="check"><input id="show-zones" type="checkbox" checked /> Zone markings &amp; labels</label>
+        <label class="check"><input id="show-berm" type="checkbox" checked /> Berm as built</label>
+        <label class="check"><input id="show-tof" type="checkbox" checked /> Single-beam time of flight</label>
+        <label>Colour points by
+          <select id="color-mode">
+            <option value="0">What they hit</option>
+            <option value="1">Height</option>
+            <option value="2">Return intensity</option>
+          </select>
+        </label>
+        <div id="legend" class="legend"></div>
+      </section>
+
+      <section class="specs">
+        <h2>Readouts</h2>
+        <table>
+          <tr><td>Points per revolution</td><td id="ro-rev">–</td></tr>
+          <tr><td>Points per second</td><td id="ro-sec">–</td></tr>
+          <tr><td>Returns last revolution</td><td id="ro-returns">–</td></tr>
+          <tr><td>Map points (2 cm cells)</td><td id="ro-map">–</td></tr>
+          <tr><td>Sensor height</td><td id="ro-height">–</td></tr>
+          <tr><td>Time-of-flight beam</td><td id="ro-tof">–</td></tr>
+        </table>
+      </section>
+
+      <section class="specs">
+        <h2>Arena (Guidebook §11)</h2>
+        <table>
+          <tr><td>Interior</td><td>6.88 × 5.0 m, BP‑1 ≈ 45 cm deep</td></tr>
+          <tr><td>Zones</td><td>Excavation 2.5 m (incl. 2 × 2 m starting zone) · Obstacle 4.38 m · Construction ≈ 3 × 1.5 m</td></tr>
+          <tr><td>Berm box</td><td>2.2 × 0.9 m centred at X 5.38, Y 0.9 m</td></tr>
+          <tr><td>Boulders</td><td>≥ 3, 30–40 cm Ø, random each round</td></tr>
+          <tr><td>Craters</td><td>≥ 3, ≤ 40–50 cm wide / deep</td></tr>
+          <tr><td>Fixed</td><td>Central support column; 17 cm PVC duct around the perimeter; walls ~1 m (assumed)</td></tr>
+          <tr><td>BP‑1</td><td>Dark crushed basalt — low laser reflectivity (§11.1.3, Fig. 7)</td></tr>
+        </table>
+        <p class="hint">Keys: 1 / 2 switch demo · Space pause · R randomise · C clear map · Drag to orbit, wheel to zoom</p>
+      </section>
+      <footer id="version"></footer>
+    </aside>
+
+    <script type="module" src="/src/lidar.ts"></script>
+  </body>
+</html>
