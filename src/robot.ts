@@ -5,8 +5,8 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 export interface RobotPose {
   /** Ladder angle about its pivot. 0 = horizontal forward (+X), negative = dug into ground, PI = stowed back over hopper. */
   ladderAngle: number;
-  /** Tip-bed rotation about rear hinge (0 = flat). */
-  bedTilt: number;
+  /** Hopper belt-floor speed 0..1 (discharges over the rear roller). */
+  belt: number;
   /** Rear gate opening 0..1. */
   gate: number;
   /** Track ground speed, m/s (signed). */
@@ -35,6 +35,9 @@ const M = {
   regolith: new THREE.MeshStandardMaterial({ color: 0x8a8378, roughness: 1, metalness: 0 }),
   orange: new THREE.MeshStandardMaterial({ color: 0xff7a1a, metalness: 0.3, roughness: 0.5 }),
   green: new THREE.MeshStandardMaterial({ color: 0x3fbf6f, emissive: 0x1a5c33, roughness: 0.5 }),
+  // dust covers are drawn translucent so the mechanisms they enclose stay readable in the model
+  cover: new THREE.MeshStandardMaterial({ color: 0x9fb4c8, metalness: 0.4, roughness: 0.3, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide }),
+  seal: new THREE.MeshStandardMaterial({ color: 0x4a3f3a, metalness: 0.0, roughness: 0.9 }),
 };
 export const allMaterials = Object.values(M);
 
@@ -50,17 +53,22 @@ export const D = {
   frameX1: 0.45,
   frameZ: 0.26,
   tube: 0.04, // 40×40 mm extrusion
-  bedX0: -0.55,
-  bedX1: -0.05,
-  bedY0: 0.20,
-  bedH: 0.22,
-  bedZ: 0.25,
-  ladderPivot: new THREE.Vector3(0.30, 0.60, 0),
-  ladderLen: 0.62,
+  // Belt-floor hopper: rear roller overhangs the tracks so discharge clears them; front wall sits
+  // under the ladder discharge arc and below the bucket swing circle (r ≈ 0.14 about the pivot).
+  hopX0: -0.60, // rear roller centre
+  hopX1: 0.20, // front roller centre
+  hopY: 0.245, // roller centreline
+  hopR: 0.025, // roller + belt radius
+  hopH: 0.11, // sidewall height above the belt
+  hopZ: 0.23, // half-width inside the frame rails
+  // Pivot lowered so the stowed ladder (buckets up) tops out at 73 cm < 75 cm envelope;
+  // ladder lengthened so −45° reaches ~10 cm below grade with the bucket tip 25 cm ahead of the tracks.
+  ladderPivot: new THREE.Vector3(0.30, 0.56, 0),
+  ladderLen: 0.70,
   ladderR: 0.06, // chain sprocket radius
   ladderZ: 0.14, // half-width of ladder rails
   bucketN: 7,
-  mastPos: new THREE.Vector3(-0.50, 0, -0.30),
+  mastPos: new THREE.Vector3(-0.50, 0, -0.33), // outboard of the hopper sidewall + rib (z −0.27)
 };
 
 export const STOWED_ENVELOPE = { l: 1.5, w: 0.75, h: 0.75 };
@@ -105,6 +113,7 @@ const Z_AXIS = new THREE.Vector3(0, 0, 1);
 /** Electric linear actuator: body at `base`, rod extends toward `tip`. */
 class Actuator extends THREE.Group {
   private rod: THREE.Mesh;
+  private bellows: THREE.Mesh[] = [];
   private bodyLen: number;
   constructor(bodyLen: number, r: number) {
     super();
@@ -115,6 +124,14 @@ class Actuator extends THREE.Group {
     eye.position.y = -bodyLen / 2;
     const motor = box(r * 1.6, r * 2.2, r * 1.6, M.aluDark, 0, -bodyLen / 2 + r * 1.6, r * 1.3);
     this.add(body, this.rod, eye, motor);
+    // convoluted rod bellows: rings spread evenly over the exposed rod length
+    const ring = new THREE.TorusGeometry(r * 0.72, r * 0.22, 6, 14);
+    for (let i = 0; i < 7; i++) {
+      const b = new THREE.Mesh(ring, M.seal);
+      b.rotation.x = Math.PI / 2;
+      this.bellows.push(b);
+      this.add(b);
+    }
   }
   /** Endpoints expressed in the actuator's parent space. */
   update(base: THREE.Vector3, tip: THREE.Vector3) {
@@ -126,6 +143,8 @@ class Actuator extends THREE.Group {
     const rodLen = Math.max(0.01, len - this.bodyLen);
     this.rod.scale.y = rodLen;
     this.rod.position.y = this.bodyLen / 2 + rodLen / 2;
+    const n = this.bellows.length;
+    for (let i = 0; i < n; i++) this.bellows[i].position.y = this.bodyLen / 2 + (rodLen * (i + 0.5)) / n;
   }
 }
 
@@ -178,7 +197,8 @@ class Track extends THREE.Group {
   private wheels: THREE.Mesh[] = [];
   private phase = 0;
   private per: number;
-  constructor() {
+  /** `outboard` = sign of Z pointing away from the chassis; the full-height dust cover goes on that side. */
+  constructor(outboard: 1 | -1) {
     super();
     const { trackLen: L, trackR: R, trackW: W } = D;
     this.per = loopPerimeter(L, R);
@@ -202,7 +222,14 @@ class Track extends THREE.Group {
       this.wheels.push(w);
     }
     // side plates of track frame
-    for (const z of [-1, 1]) this.add(box(L + 0.02, 0.07, 0.012, M.alu, L / 2, 0.015, z * (W / 2 + 0.008)));
+    for (const z of [-1, 1]) this.add(box(L + 0.02, 0.07, 0.010, M.alu, L / 2, 0.015, z * (W / 2 + 0.006)));
+    // outboard dust cover over sprockets/idlers/hubs with labyrinth shaft seals — only the cleated belt is exposed
+    this.add(box(L + 2 * R - 0.02, 2 * R - 0.03, 0.004, M.cover, L / 2, 0, outboard * (W / 2 + 0.009)));
+    for (const x of [0, L]) {
+      const seal = cyl(0.036, 0.006, M.seal, 'z');
+      seal.position.set(x, 0, outboard * (W / 2 + 0.008));
+      this.add(seal);
+    }
 
     const cg = new THREE.BoxGeometry(0.03, 0.022, W + 0.01);
     for (let i = 0; i < 26; i++) {
@@ -249,7 +276,7 @@ class Ladder extends THREE.Group {
     }
     for (const x of [0.14, L * 0.55, L - 0.04]) {
       const cm = cyl(0.011, Z * 2, M.alu, 'z');
-      cm.position.set(x, R + 0.02, 0);
+      cm.position.set(x, R + 0.032, 0);
       this.add(cm);
     }
     for (const x of [0, L]) {
@@ -266,6 +293,13 @@ class Ladder extends THREE.Group {
     for (const z of [-chainZ, chainZ]) {
       this.add(box(L, 0.014, 0.012, M.steel, L / 2, R, z));
       this.add(box(L, 0.014, 0.012, M.steel, L / 2, -R, z));
+      // chain-run cover: C-channel around each chain strand; buckets hang on link ears outside the channel slot
+      this.add(box(L, 2 * R + 0.03, 0.03, M.cover, L / 2, 0, z));
+      for (const x of [0, L]) {
+        const cap = cyl(R + 0.016, 0.03, M.cover, 'z', 24);
+        cap.position.set(x, 0, z);
+        this.add(cap);
+      }
     }
     // chain drive motor + gearbox on the top shaft, outboard of the rail
     const gb = box(0.08, 0.08, 0.05, M.aluDark, 0, 0, Z + 0.045);
@@ -312,18 +346,74 @@ class Ladder extends THREE.Group {
   }
 }
 
+// ---------- hopper belt floor (origin at rear roller centre, runs +X to the front roller) ----------
+class BeltFloor extends THREE.Group {
+  private lugs: THREE.Mesh[] = [];
+  private rollers: THREE.Mesh[] = [];
+  private phase = 0;
+  private per: number;
+  private len: number;
+  private r: number;
+  constructor() {
+    super();
+    const len = D.hopX1 - D.hopX0, r = D.hopR, w = D.hopZ * 2 - 0.01;
+    this.len = len; this.r = r;
+    this.per = loopPerimeter(len, r);
+    const belt = new THREE.Mesh(beltGeometry(len, r, 0.005, w), M.rubber);
+    belt.castShadow = belt.receiveShadow = true;
+    this.add(belt);
+    for (const x of [0, len]) {
+      const roller = cyl(r - 0.006, w + 0.02, M.aluDark, 'z', 16);
+      roller.position.set(x, 0, 0);
+      this.add(roller);
+      this.rollers.push(roller);
+    }
+    // belt drive gearmotor on the rear roller, outboard of the +Z rail
+    const motor = cyl(0.025, 0.08, M.black, 'z');
+    motor.position.set(0, 0, D.hopZ + 0.09);
+    const housing = box(0.07, 0.07, 0.08, M.aluDark, 0, 0, D.hopZ + 0.09);
+    const seal = cyl(r + 0.004, 0.008, M.seal, 'z');
+    seal.position.set(0, 0, D.hopZ + 0.02);
+    this.add(motor, housing, seal);
+    const lg = new THREE.BoxGeometry(0.012, 0.01, w - 0.02);
+    for (let i = 0; i < 14; i++) {
+      const l = new THREE.Mesh(lg, M.steel);
+      this.lugs.push(l);
+      this.add(l);
+    }
+    this.layout();
+  }
+  private layout() {
+    const p = new THREE.Vector3(), t = new THREE.Vector3(), n = new THREE.Vector3();
+    const N = this.lugs.length;
+    for (let i = 0; i < N; i++) {
+      // loopPoint's top run travels -X (toward the rear roller) so the load discharges rearward
+      loopPoint(this.phase + (i / N) * this.per, this.len, this.r, p, t);
+      n.set(t.y, -t.x, 0);
+      const l = this.lugs[i];
+      l.position.copy(p).addScaledVector(n, 0.005);
+      l.rotation.z = Math.atan2(t.y, t.x);
+    }
+  }
+  advance(dist: number) {
+    this.phase = (this.phase + dist) % this.per;
+    for (const r of this.rollers) r.rotation.z -= dist / this.r;
+    this.layout();
+  }
+}
+
 // ---------- complete robot ----------
 export class Robot extends THREE.Group {
-  private trackL = new Track();
-  private trackR = new Track();
+  private trackL = new Track(-1);
+  private trackR = new Track(1);
   private ladderPivot = new THREE.Group();
   private ladder = new Ladder();
-  private bedPivot = new THREE.Group();
-  private bedActs: Actuator[] = [];
+  private belt = new BeltFloor();
   private gatePivot = new THREE.Group();
   private gateAct = new Actuator(0.09, 0.013);
   private mastInner: THREE.Mesh;
   private mastHead = new THREE.Group();
+  private wiper = new THREE.Group();
   private fillMesh: THREE.Mesh;
   readonly labels: THREE.Object3D[] = [];
   readonly envelope: THREE.LineSegments;
@@ -338,11 +428,16 @@ export class Robot extends THREE.Group {
     this.trackR.position.set(TX, R, TZ);
     this.add(this.trackL, this.trackR);
     for (const z of [-1, 1]) {
+      const mz = z * (TZ - D.trackW / 2 - 0.075);
       const m = cyl(0.035, 0.12, M.black, 'z');
-      m.position.set(TX, R, z * (TZ - D.trackW / 2 - 0.075));
-      this.add(m);
+      m.position.set(TX, R, mz);
+      // sealed gearmotor housing inboard of the track, shaft seal at the track frame
+      const housing = box(0.10, 0.10, 0.14, M.aluDark, TX, R, mz);
+      const seal = cyl(0.03, 0.01, M.seal, 'z');
+      seal.position.set(TX, R, z * (TZ - D.trackW / 2 - 0.003));
+      this.add(m, housing, seal);
     }
-    this.labels.push(label('Tracked skid-steer drive (2× BLDC gearmotors)', new THREE.Vector3(TX, 0.02, TZ + 0.1)));
+    this.labels.push(label('Tracked skid-steer drive: 2× BLDC gearmotors in sealed housings, enclosed sprockets', new THREE.Vector3(TX, 0.02, TZ + 0.1)));
 
     // ---- main frame: 40×40 extrusion ----
     const L = fx1 - fx0;
@@ -353,30 +448,37 @@ export class Robot extends THREE.Group {
     }
     this.add(box(0.48, 0.006, fz * 2 - 0.02, M.aluDark, 0.21, fy + t / 2 + 0.003, 0)); // front deck plate
 
-    // ---- battery, avionics, power logger ----
+    // ---- sealed e-bay under the ladder tower (hopper now occupies the deck behind it) ----
     const deck = fy + t / 2;
-    this.add(box(0.20, 0.12, 0.24, M.blue, 0.08, deck + 0.06, 0.09));
-    this.labels.push(label('Battery (48 V LiFePO₄)', new THREE.Vector3(0.08, deck + 0.19, 0.09)));
-    this.add(box(0.18, 0.10, 0.16, M.aluDark, 0.08, deck + 0.05, -0.14));
-    this.labels.push(label('Avionics + motor controllers', new THREE.Vector3(0.08, deck + 0.17, -0.2)));
-    this.add(box(0.07, 0.04, 0.05, M.white, 0.26, deck + 0.02, -0.19));
-    this.add(box(0.012, 0.012, 0.004, M.green, 0.26, deck + 0.03, -0.164));
-    this.labels.push(label('COTS power logger (battery → logger → E-stop)', new THREE.Vector3(0.26, deck + 0.1, -0.19)));
-    this.add(strut(new THREE.Vector3(0.18, deck + 0.08, 0.02), new THREE.Vector3(0.245, deck + 0.04, -0.17), 0.004, M.red));
-    this.add(strut(new THREE.Vector3(0.28, deck + 0.04, -0.18), new THREE.Vector3(0.36, deck + 0.03, 0.17), 0.004, M.red));
+    this.add(box(0.20, 0.12, 0.20, M.blue, 0.335, deck + 0.06, 0.08));
+    this.labels.push(label('Battery (48 V LiFePO₄)', new THREE.Vector3(0.335, deck + 0.15, 0.14)));
+    this.add(box(0.18, 0.10, 0.16, M.aluDark, 0.335, deck + 0.05, -0.14));
+    this.labels.push(label('Avionics + motor controllers', new THREE.Vector3(0.335, deck + 0.13, -0.2)));
+    // Lid seals the bay against dust and catches any forward spill from the bucket discharge.
+    this.add(box(0.22, 0.006, 0.44, M.aluDark, 0.335, 0.345, 0));
+    this.labels.push(label('Sealed e-bay lid / spill deflector', new THREE.Vector3(0.42, 0.40, 0.25)));
+    // Logger rides the front tower strut at ~0.5 m so a judge can read/remove it standing (§13.1.1).
+    this.add(box(0.07, 0.04, 0.05, M.white, 0.33, 0.50, 0.23));
+    this.add(box(0.012, 0.012, 0.004, M.green, 0.33, 0.51, 0.256));
+    this.labels.push(label('COTS power logger (battery → logger → E-stop)', new THREE.Vector3(0.33, 0.58, 0.30)));
+    this.add(strut(new THREE.Vector3(0.40, 0.348, 0.15), new THREE.Vector3(0.33, 0.48, 0.21), 0.004, M.red));
+    this.add(strut(new THREE.Vector3(0.33, 0.52, 0.21), new THREE.Vector3(0.30, 0.62, -0.20), 0.004, M.red));
 
     // ---- ladder tower (A-frame) + pivot bearings + slew gearmotor ----
     const P = D.ladderPivot;
     const tz = D.ladderZ + 0.04;
     for (const z of [-tz, tz]) {
-      this.add(strut(new THREE.Vector3(0.43, deck, z), new THREE.Vector3(P.x, P.y, z), 0.016, M.alu));
-      this.add(strut(new THREE.Vector3(0.16, deck, z), new THREE.Vector3(P.x, P.y, z), 0.016, M.alu));
+      const zb = Math.sign(z) * 0.235; // strut feet outboard of the e-bay, just inside the rails
+      this.add(strut(new THREE.Vector3(0.44, deck, zb), new THREE.Vector3(P.x, P.y, z), 0.016, M.alu));
+      this.add(strut(new THREE.Vector3(0.24, deck, zb), new THREE.Vector3(P.x, P.y, z), 0.016, M.alu));
       const brg = cyl(0.035, 0.03, M.aluDark, 'z');
       brg.position.set(P.x, P.y, z);
-      this.add(brg);
+      const lab = cyl(0.04, 0.012, M.seal, 'z'); // labyrinth/felt seal on the pivot bearing
+      lab.position.set(P.x, P.y, z - Math.sign(z) * 0.021);
+      this.add(brg, lab);
     }
     const crossbar = cyl(0.012, tz * 2, M.alu, 'z');
-    crossbar.position.set(0.30, 0.40, 0);
+    crossbar.position.set(0.32, 0.40, 0);
     this.add(crossbar);
     const shaft = cyl(0.016, tz * 2 + 0.1, M.steel, 'z');
     shaft.position.copy(P);
@@ -385,62 +487,57 @@ export class Robot extends THREE.Group {
     const slewMotor = cyl(0.03, 0.12, M.black, 'x');
     slewMotor.position.set(P.x - 0.105, P.y, -(tz + 0.045));
     this.add(slewBox, slewMotor);
-    this.labels.push(label('Ladder slew: worm gearmotor (225° travel)', new THREE.Vector3(P.x, P.y + 0.1, -tz - 0.05)));
+    this.labels.push(label('Ladder slew: worm gearmotor (−60°…180°)', new THREE.Vector3(P.x - 0.15, P.y + 0.05, -tz - 0.05)));
+
+    // ---- E-stop: 40 mm red mushroom on top of the slew housing — highest fixed point, clear of the stowed ladder ----
+    const es = new THREE.Group();
+    es.add(box(0.07, 0.05, 0.07, M.yellow, 0, 0.025, 0));
+    const stem = cyl(0.012, 0.025, M.black, 'y');
+    stem.position.y = 0.06;
+    const cap = cyl(0.02, 0.018, M.red, 'y');
+    cap.position.y = 0.082;
+    es.add(stem, cap);
+    es.position.set(P.x, P.y + 0.045, -(tz + 0.045));
+    this.add(es);
+    this.labels.push(label('E-stop (Ø40 mm, highest fixed point, unobstructed)', new THREE.Vector3(P.x, P.y + 0.24, -tz - 0.05)));
 
     // ---- ladder ----
     this.ladderPivot.position.copy(P);
     this.ladderPivot.add(this.ladder);
     this.add(this.ladderPivot);
-    this.labels.push(label('Bucket-ladder: 7 buckets, dual roller chain', new THREE.Vector3(0.45, -0.05, 0)));
+    this.labels.push(label('Bucket-ladder: 7 buckets, dual roller chain, 0–15 cm dig depth', new THREE.Vector3(0.45, -0.05, 0)));
     this.ladder.add(this.labels[this.labels.length - 1]);
 
-    // ---- transfer chute under top sprocket, sloping back into hopper ----
-    const chuteLen = 0.33, chuteAng = 0.17;
-    const cx = 0.095, cy = 0.445;
-    const chute = box(chuteLen, 0.006, D.ladderZ * 2 + 0.02, M.aluDark, cx, cy, 0);
-    chute.rotation.z = chuteAng;
-    this.add(chute);
-    for (const z of [-1, 1]) {
-      const w = box(chuteLen, 0.06, 0.006, M.aluDark, cx, cy + 0.03, z * (D.ladderZ + 0.013));
-      w.rotation.z = chuteAng;
-      this.add(w);
+    // ---- belt-floor hopper: buckets discharge straight in behind the pivot; belt carries the load rearward ----
+    const { hopX0: hx0, hopX1: hx1, hopY: hy, hopR: hr, hopH: hh, hopZ: hz } = D;
+    const sh = 0.004;
+    const floorY = hy + hr;
+    const hl = hx1 - hx0 + 2 * hr; // overall bin length incl. roller ends
+    const hcx = (hx0 + hx1) / 2;
+    this.belt.position.set(hx0, hy, 0);
+    this.add(this.belt);
+    for (const z of [-hz, hz]) {
+      this.add(box(hl, hh + hr, sh, M.alu, hcx, floorY - hr / 2 + hh / 2, z)); // sidewall + skirt
+      for (const x of [hx0 + 0.05, hcx, hx1 - 0.05]) this.add(box(0.03, hh, 0.008, M.aluDark, x, floorY + hh / 2, Math.sign(z) * (hz + 0.006)));
     }
-    this.labels.push(label('Transfer chute', new THREE.Vector3(0.12, 0.44, 0.25)));
+    this.add(box(sh, hh + hr, hz * 2, M.alu, hx1 + hr, floorY - hr / 2 + hh / 2, 0)); // front wall
+    this.labels.push(label('Belt-floor hopper (~32 L working, rear discharge)', new THREE.Vector3(-0.2, 0.50, 0)));
+    // discharge side shields: extend the sidewalls forward past the pivot (outside the bucket swing)
+    // so inverted buckets spill into the bin, not onto the deck — "transfer without dumping on the robot"
+    for (const z of [-0.236, 0.236]) this.add(box(0.235, 0.12, sh, M.cover, 0.3225, 0.41, z));
+    this.labels.push(label('Discharge side shields + e-bay lid deflector', new THREE.Vector3(0.32, 0.56, 0.30)));
 
-    // ---- tip bed (hopper) ----
-    this.bedPivot.position.set(D.bedX0, D.bedY0, 0);
-    this.add(this.bedPivot);
-    const bl = D.bedX1 - D.bedX0, bh = D.bedH, bz = D.bedZ, sh = 0.004;
-    const bed = new THREE.Group();
-    bed.add(box(bl, sh, bz * 2, M.alu, bl / 2, 0, 0));
-    for (const z of [-bz, bz]) bed.add(box(bl, bh, sh, M.alu, bl / 2, bh / 2, z));
-    bed.add(box(sh, bh, bz * 2, M.alu, bl, bh / 2, 0));
-    for (const x of [0.07, bl / 2, bl - 0.07]) for (const z of [-1, 1]) {
-      bed.add(box(0.03, bh, 0.012, M.aluDark, x, bh / 2, z * (bz + 0.008)));
-    }
-    for (const z of [-1, 1]) bed.add(box(bl, 0.03, 0.03, M.aluDark, bl / 2, -0.018, z * (bz - 0.02)));
-    bed.add(cyl(0.014, bz * 2 + 0.1, M.steel, 'z')); // hinge pin
-    this.bedPivot.add(bed);
-    this.labels.push(label('Tip-dump hopper (~50 L, 2× linear actuators)', new THREE.Vector3(-0.3, 0.55, 0)));
-
-    this.fillMesh = box(bl - 0.02, 1, bz * 2 - 0.02, M.regolith, bl / 2, 0.003, 0);
+    this.fillMesh = box(hl - 0.03, 1, hz * 2 - 0.02, M.regolith, hcx, floorY + 0.002, 0);
     this.fillMesh.geometry.translate(0, 0.5, 0);
-    this.bedPivot.add(this.fillMesh);
+    this.add(this.fillMesh);
 
-    // rear gate hinged at top-rear edge
-    this.gatePivot.position.set(0, bh, 0);
-    this.gatePivot.add(box(sh, bh - 0.004, bz * 2 - 0.01, M.gold, 0, -(bh - 0.004) / 2, 0));
-    this.gatePivot.add(cyl(0.011, bz * 2, M.steel, 'z'));
-    this.gatePivot.add(box(0.012, 0.03, 0.03, M.steel, -0.006, -0.08, 0)); // actuator lug
-    bed.add(this.gatePivot, this.gateAct);
-    this.labels.push(label('Actuated rear gate', new THREE.Vector3(-0.62, 0.42, 0.28)));
-
-    for (const z of [-0.15, 0.15]) {
-      const a = new Actuator(0.20, 0.019);
-      a.userData.z = z;
-      this.bedActs.push(a);
-      this.add(a);
-    }
+    // rear gate hinged at the top-rear edge, lifted by one small actuator on the +Z sidewall
+    this.gatePivot.position.set(hx0 - hr, floorY + hh, 0);
+    this.gatePivot.add(box(sh, hh + hr - 0.004, hz * 2 - 0.01, M.gold, 0, -(hh + hr) / 2, 0));
+    this.gatePivot.add(cyl(0.011, hz * 2 + 0.02, M.steel, 'z'));
+    this.gatePivot.add(box(0.012, 0.03, 0.03, M.steel, -0.006, -0.07, hz + 0.02)); // actuator lug
+    this.add(this.gatePivot, this.gateAct);
+    this.labels.push(label('Actuated rear gate (bellows-sealed actuator)', new THREE.Vector3(hx0 - 0.05, floorY + hh + 0.08, hz + 0.05)));
 
     // ---- lifting points ----
     for (const x of [fx0 + 0.07, fx1 - 0.07]) for (const z of [-fz, fz]) {
@@ -453,24 +550,15 @@ export class Robot extends THREE.Group {
     }
     this.labels.push(label('Marked lifting point ×4', new THREE.Vector3(fx1 - 0.07, fy + 0.12, fz)));
 
-    // ---- E-stop: 40 mm red mushroom, top-mounted ----
-    const es = new THREE.Group();
-    es.add(box(0.07, 0.05, 0.07, M.yellow, 0, 0.025, 0));
-    const stem = cyl(0.012, 0.025, M.black, 'y');
-    stem.position.y = 0.06;
-    const cap = cyl(0.02, 0.018, M.red, 'y');
-    cap.position.y = 0.082;
-    es.add(stem, cap);
-    es.position.set(0.37, deck, 0.19);
-    this.add(es);
-    this.labels.push(label('E-stop (Ø40 mm, unobstructed)', new THREE.Vector3(0.37, deck + 0.2, 0.19)));
-
-    // ---- telescoping sensor mast (rear-left, clear of ladder sweep) ----
+    // ---- telescoping sensor mast (rear-left, clear of ladder sweep and hopper) ----
     const mp = D.mastPos;
-    this.add(box(0.06, 0.025, 0.10, M.aluDark, mp.x, fy + 0.0325, mp.z + 0.02));
+    this.add(box(0.06, 0.025, 0.08, M.aluDark, mp.x, fy + 0.0325, mp.z + 0.01));
     const mastBase = cyl(0.025, 0.26, M.alu, 'y');
     mastBase.position.set(mp.x, fy + 0.045 + 0.13, mp.z);
     this.add(mastBase);
+    const mastSeal = cyl(0.03, 0.016, M.seal, 'y'); // wiper seal where the inner tube telescopes out
+    mastSeal.position.set(mp.x, fy + 0.045 + 0.26, mp.z);
+    this.add(mastSeal);
     this.mastInner = cyl(0.016, 1, M.aluDark, 'y');
     this.mastInner.geometry.translate(0, 0.5, 0);
     this.mastInner.position.set(mp.x, fy + 0.045 + 0.26 - 0.02, mp.z);
@@ -485,10 +573,33 @@ export class Robot extends THREE.Group {
       lens.position.set(0.055, -0.055, z);
       this.mastHead.add(lens);
     }
-    const ant = cyl(0.004, 0.08, M.black, 'y');
-    ant.position.set(-0.03, 0.07, 0);
-    this.mastHead.add(ant);
-    const headLabel = label('3D LiDAR + stereo cameras + 2.4/5 GHz radio', new THREE.Vector3(0, 0.16, 0));
+    // Rear camera: the robot reverses to dump, and the starting-zone fiducials (§13.7.2) are behind it in transit.
+    const rearCam = cyl(0.012, 0.02, M.lens, 'x');
+    rearCam.position.set(-0.03, -0.055, 0);
+    this.mastHead.add(rearCam);
+    // 2×2 MIMO Wi‑Fi client lives on the mast head (Ethernet down the mast, no coax loss);
+    // two dipoles spaced ~λ/2 at 2.4 GHz for spatial diversity on the forced 20 MHz Channel 1.
+    const radio = box(0.05, 0.02, 0.09, M.aluDark, -0.04, 0.045, 0);
+    this.mastHead.add(radio);
+    for (const z of [-0.06, 0.06]) {
+      const ant = cyl(0.004, 0.08, M.black, 'y');
+      ant.position.set(-0.04, 0.095, z);
+      this.mastHead.add(ant);
+    }
+    // Active dust control: a slow rotary brush sweeps the LiDAR window band and the three camera lenses
+    // (mechanical brushing is lunar-plausible; compressed air is prohibited and lens cleaning must use a lunar-suitable process, §13.8.1).
+    const wiperMotor = cyl(0.014, 0.02, M.black, 'y');
+    wiperMotor.position.y = 0.04;
+    this.mastHead.add(wiperMotor);
+    const arm = box(0.004, 0.004, 0.062, M.alu, 0, 0.03, 0.031);
+    const brush = box(0.006, 0.06, 0.008, M.seal, 0, -0.005, 0.058);
+    this.wiper.add(arm, brush);
+    this.mastHead.add(this.wiper);
+    for (const [x, z] of [[0.07, -0.09], [0.07, 0.09], [-0.045, 0]] as const) {
+      const blade = box(0.004, 0.032, 0.006, M.seal, x, -0.055, z); // lens wiper blades, cammed off the brush shaft
+      this.mastHead.add(blade);
+    }
+    const headLabel = label('3D LiDAR + stereo + rear camera + 2×2 MIMO radio; rotary lens brush', new THREE.Vector3(0, 0.18, 0));
     this.mastHead.add(headLabel);
     this.labels.push(headLabel);
     this.add(this.mastHead);
@@ -512,25 +623,20 @@ export class Robot extends THREE.Group {
     this.ladderPivot.rotation.z = pose.ladderAngle;
     if (pose.chainSpeed > 0.001) this.ladder.advance(pose.chainSpeed * 0.6 * dt);
 
-    // tip bed about rear hinge (positive Z rotation lifts the front)
-    this.bedPivot.rotation.z = pose.bedTilt;
-    for (const a of this.bedActs) {
-      const z = a.userData.z as number;
-      const base = new THREE.Vector3(-0.04, D.frameY - 0.01, z);
-      const tip = new THREE.Vector3(0.26, -0.03, z).applyAxisAngle(Z_AXIS, pose.bedTilt).add(this.bedPivot.position);
-      a.update(base, tip);
-    }
+    // belt floor
+    if (pose.belt > 0.001) this.belt.advance(pose.belt * 0.25 * dt);
 
     // gate swings rearward (bottom edge toward -X) about its top hinge
     const ga = -pose.gate * 1.15;
     this.gatePivot.rotation.z = ga;
-    const gBase = new THREE.Vector3(0.17, D.bedH + 0.03, 0);
-    const gLug = new THREE.Vector3(0, -0.08, 0).applyAxisAngle(Z_AXIS, ga).add(this.gatePivot.position);
+    const gBase = new THREE.Vector3(D.hopX0 + 0.14, D.hopY + D.hopR + D.hopH + 0.02, D.hopZ + 0.02);
+    const gLug = new THREE.Vector3(0, -0.07, D.hopZ + 0.02).applyAxisAngle(Z_AXIS, ga).add(this.gatePivot.position);
     this.gateAct.update(gBase, gLug);
 
-    this.fillMesh.scale.y = Math.max(0.001, pose.fill * (D.bedH - 0.025));
+    this.fillMesh.scale.y = Math.max(0.001, pose.fill * (D.hopH - 0.015));
 
-    // telescoping mast
+    // telescoping mast; lens brush runs whenever the mast is deployed
+    if (pose.mast > 0.5) this.wiper.rotation.y += 1.2 * dt;
     const ext = 0.04 + pose.mast * 0.8;
     this.mastInner.scale.y = ext;
     const mp = D.mastPos;
