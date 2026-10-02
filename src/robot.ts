@@ -397,7 +397,7 @@ class BeltFloor extends THREE.Group {
   }
   advance(dist: number) {
     this.phase = (this.phase + dist) % this.per;
-    for (const r of this.rollers) r.rotation.z -= dist / this.r;
+    for (const r of this.rollers) r.rotation.z += dist / this.r;
     this.layout();
   }
 }
@@ -531,11 +531,15 @@ export class Robot extends THREE.Group {
     this.fillMesh.geometry.translate(0, 0.5, 0);
     this.add(this.fillMesh);
 
-    // rear gate hinged at the top-rear edge, lifted by one small actuator on the +Z sidewall
+    // rear gate hinged at the top-rear edge. A short crank above the hinge is pulled forward by one
+    // actuator on the +Z sidewall, flipping the gate ~105° so it clears the discharge stream entirely.
     this.gatePivot.position.set(hx0 - hr, floorY + hh, 0);
     this.gatePivot.add(box(sh, hh + hr - 0.004, hz * 2 - 0.01, M.gold, 0, -(hh + hr) / 2, 0));
-    this.gatePivot.add(cyl(0.011, hz * 2 + 0.02, M.steel, 'z'));
-    this.gatePivot.add(box(0.012, 0.03, 0.03, M.steel, -0.006, -0.07, hz + 0.02)); // actuator lug
+    this.gatePivot.add(cyl(0.011, hz * 2 + 0.06, M.steel, 'z'));
+    this.gatePivot.add(box(0.012, 0.07, 0.012, M.steel, 0, 0.035, hz + 0.02)); // crank arm
+    const lugPin = cyl(0.008, 0.02, M.steel, 'z');
+    lugPin.position.set(0, 0.06, hz + 0.02);
+    this.gatePivot.add(lugPin);
     this.add(this.gatePivot, this.gateAct);
     this.labels.push(label('Actuated rear gate (bellows-sealed actuator)', new THREE.Vector3(hx0 - 0.05, floorY + hh + 0.08, hz + 0.05)));
 
@@ -626,11 +630,11 @@ export class Robot extends THREE.Group {
     // belt floor
     if (pose.belt > 0.001) this.belt.advance(pose.belt * 0.25 * dt);
 
-    // gate swings rearward (bottom edge toward -X) about its top hinge
-    const ga = -pose.gate * 1.15;
+    // gate flips rearward/up about its top hinge (0 → ~105°); actuator pulls the crank forward
+    const ga = -pose.gate * 1.83;
     this.gatePivot.rotation.z = ga;
-    const gBase = new THREE.Vector3(D.hopX0 + 0.14, D.hopY + D.hopR + D.hopH + 0.02, D.hopZ + 0.02);
-    const gLug = new THREE.Vector3(0, -0.07, D.hopZ + 0.02).applyAxisAngle(Z_AXIS, ga).add(this.gatePivot.position);
+    const gBase = new THREE.Vector3(D.hopX0 + 0.20, D.hopY + D.hopR + D.hopH + 0.02, D.hopZ + 0.02);
+    const gLug = new THREE.Vector3(0, 0.06, D.hopZ + 0.02).applyAxisAngle(Z_AXIS, ga).add(this.gatePivot.position);
     this.gateAct.update(gBase, gLug);
 
     this.fillMesh.scale.y = Math.max(0.001, pose.fill * (D.hopH - 0.015));
