@@ -657,6 +657,12 @@ export class Robot extends THREE.Group {
     }
   }
 
+  /** World position of the LiDAR optical centre on the mast head (valid after `update()` + matrix update). */
+  getLidarWorldPosition(out: THREE.Vector3) {
+    this.updateMatrixWorld();
+    return this.mastHead.getWorldPosition(out);
+  }
+
   setWireframe(on: boolean) {
     for (const m of allMaterials) m.wireframe = on;
   }
