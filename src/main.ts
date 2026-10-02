@@ -17,38 +17,38 @@ interface Mode {
 const MODES: Mode[] = [
   {
     name: 'Stow',
-    desc: 'Inspection / start configuration: ladder folded back over the hopper, mast collapsed, bed flat. 106×74×73 cm inside the 150×75×75 cm envelope. Comms must come up in this pose (setup starts here).',
-    pose: { ladderAngle: deg(180), bedTilt: 0, gate: 0, trackSpeed: 0, chainSpeed: 0, mast: 0, fill: 0 },
+    desc: 'Inspection / start configuration: ladder folded back over the hopper, mast collapsed, gate shut. ≈108×74×73 cm inside the 150×75×75 cm envelope. Comms must come up in this pose (setup starts here).',
+    pose: { ladderAngle: deg(180), belt: 0, gate: 0, trackSpeed: 0, chainSpeed: 0, mast: 0, fill: 0 },
     berm: 0,
   },
   {
     name: 'Drive',
     desc: 'Traverse to the excavation zone. Mast deployed for LiDAR/stereo localisation, ladder raised and locked back.',
-    pose: { ladderAngle: deg(176), bedTilt: 0, gate: 0, trackSpeed: 0.35, chainSpeed: 0, mast: 1, fill: 0 },
+    pose: { ladderAngle: deg(176), belt: 0, gate: 0, trackSpeed: 0.35, chainSpeed: 0, mast: 1, fill: 0 },
     berm: null,
   },
   {
     name: 'Excavate',
-    desc: 'Ladder slewed down ~45° so the buckets cut ~10 cm below grade (slew to −60° for 15 cm). Bucket chain runs, robot creeps forward; buckets discharge over the top sprocket into the chute and hopper.',
-    pose: { ladderAngle: deg(-45), bedTilt: 0, gate: 0, trackSpeed: 0.04, chainSpeed: 1, mast: 1, fill: 1 },
+    desc: 'Ladder slewed down ~45° so the buckets cut ~10 cm below grade (slew to −60° for 15 cm). Bucket chain runs, robot creeps forward; buckets invert over the top sprocket and drop straight into the belt-floor hopper.',
+    pose: { ladderAngle: deg(-45), belt: 0, gate: 0, trackSpeed: 0.04, chainSpeed: 1, mast: 1, fill: 1 },
     berm: null,
   },
   {
     name: 'Transit',
     desc: 'Loaded hopper, ladder raised back for stability, driving to the construction zone.',
-    pose: { ladderAngle: deg(176), bedTilt: 0, gate: 0, trackSpeed: 0.35, chainSpeed: 0, mast: 1, fill: 1 },
+    pose: { ladderAngle: deg(176), belt: 0, gate: 0, trackSpeed: 0.35, chainSpeed: 0, mast: 1, fill: 1 },
     berm: null,
   },
   {
     name: 'Dump',
-    desc: 'Ladder swung forward out of the way, bed tipped 50° by twin actuators, rear gate lifted; regolith slides onto the berm.',
-    pose: { ladderAngle: deg(-5), bedTilt: deg(50), gate: 1, trackSpeed: 0, chainSpeed: 0, mast: 1, fill: 0 },
+    desc: 'Backed up to the berm with the ladder still raised. Rear gate lifts, then the belt floor runs and meters regolith off the rear roller at ~27 cm — low drop, little dust, no tipping load.',
+    pose: { ladderAngle: deg(176), belt: 1, gate: 1, trackSpeed: 0, chainSpeed: 0, mast: 1, fill: 0 },
     berm: 1,
   },
   {
     name: 'Manual',
     desc: 'Pose set from the sliders below.',
-    pose: { ladderAngle: deg(0), bedTilt: 0, gate: 0, trackSpeed: 0, chainSpeed: 0, mast: 1, fill: 0.5 },
+    pose: { ladderAngle: deg(0), belt: 0, gate: 0, trackSpeed: 0, chainSpeed: 0, mast: 1, fill: 0.5 },
     berm: null,
   },
 ];
@@ -125,7 +125,7 @@ const bermPile = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: 0x8a8378, roughness: 1 }),
 );
 bermPile.castShadow = bermPile.receiveShadow = true;
-bermPile.position.set(-1.35, 0, 0);
+bermPile.position.set(-1.1, 0, 0);
 scene.add(bermPile);
 
 // excavation pit indicator (slightly darker patch ahead)
@@ -152,7 +152,7 @@ const modesEl = document.getElementById('modes')!;
 const descEl = document.getElementById('mode-desc')!;
 const sliders = {
   ladder: document.getElementById('ladder') as HTMLInputElement,
-  bed: document.getElementById('bed') as HTMLInputElement,
+  belt: document.getElementById('belt') as HTMLInputElement,
   gate: document.getElementById('gate') as HTMLInputElement,
   speed: document.getElementById('speed') as HTMLInputElement,
   fill: document.getElementById('fill') as HTMLInputElement,
@@ -161,7 +161,7 @@ sliders.ladder.min = '-60';
 sliders.ladder.max = '180';
 const vals = {
   ladder: document.getElementById('ladder-val')!,
-  bed: document.getElementById('bed-val')!,
+  belt: document.getElementById('belt-val')!,
   gate: document.getElementById('gate-val')!,
   speed: document.getElementById('speed-val')!,
   fill: document.getElementById('fill-val')!,
@@ -188,7 +188,7 @@ MODES.forEach((m, i) => {
 
 function syncSliders() {
   sliders.ladder.value = String(Math.round((target.ladderAngle * 180) / Math.PI));
-  sliders.bed.value = String(Math.round((target.bedTilt * 180) / Math.PI));
+  sliders.belt.value = String(Math.round(target.belt * 100));
   sliders.gate.value = String(Math.round(target.gate * 100));
   sliders.speed.value = String(Math.round((target.trackSpeed / 0.5) * 100));
   sliders.fill.value = String(Math.round(target.fill * 100));
@@ -197,7 +197,7 @@ function syncSliders() {
 
 function updateSliderLabels() {
   vals.ladder.textContent = `${sliders.ladder.value}°`;
-  vals.bed.textContent = `${sliders.bed.value}°`;
+  vals.belt.textContent = `${sliders.belt.value}%`;
   vals.gate.textContent = `${sliders.gate.value}%`;
   vals.speed.textContent = `${((Number(sliders.speed.value) / 100) * 0.5).toFixed(2)} m/s`;
   vals.fill.textContent = `${sliders.fill.value}%`;
@@ -206,7 +206,7 @@ function updateSliderLabels() {
 function onSlider() {
   if (!manual) selectMode(MODES.findIndex((m) => m.name === 'Manual'));
   target.ladderAngle = deg(Number(sliders.ladder.value));
-  target.bedTilt = deg(Number(sliders.bed.value));
+  target.belt = Number(sliders.belt.value) / 100;
   target.gate = Number(sliders.gate.value) / 100;
   target.trackSpeed = (Number(sliders.speed.value) / 100) * 0.5;
   target.fill = Number(sliders.fill.value) / 100;
@@ -265,7 +265,7 @@ resize();
 const clock = new THREE.Clock();
 const RATES: Record<keyof RobotPose, number> = {
   ladderAngle: 1.6,
-  bedTilt: 1.8,
+  belt: 2.5,
   gate: 2.5,
   trackSpeed: 3,
   chainSpeed: 3,
@@ -283,14 +283,15 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
 
   for (const key of Object.keys(RATES) as (keyof RobotPose)[]) {
-    if (key === 'gate' || key === 'fill') continue;
+    if (key === 'gate' || key === 'belt' || key === 'fill') continue;
     current[key] = approach(current[key], target[key], RATES[key], dt);
   }
-  // Dump sequencing: gate waits for the bed to come up; hopper empties only once the gate is open.
-  const gateGoal = target.bedTilt > 0.3 && current.bedTilt < target.bedTilt * 0.75 ? 0 : target.gate;
-  current.gate = approach(current.gate, gateGoal, RATES.gate, dt);
+  // Dump sequencing: gate opens first; belt starts once the gate is clear; hopper empties while the belt runs.
+  current.gate = approach(current.gate, target.gate, RATES.gate, dt);
+  const beltGoal = target.belt > 0 && current.gate < 0.6 ? 0 : target.belt;
+  current.belt = approach(current.belt, beltGoal, RATES.belt, dt);
   const emptying = target.fill < current.fill;
-  const fillGoal = emptying && target.gate > 0.5 && current.gate < 0.6 ? current.fill : target.fill;
+  const fillGoal = emptying && (current.gate < 0.6 || current.belt < 0.3) ? current.fill : target.fill;
   current.fill = approach(current.fill, fillGoal, emptying ? 1.2 : RATES.fill, dt);
 
   bermCurrent = approach(bermCurrent, bermTarget, 0.4, dt);

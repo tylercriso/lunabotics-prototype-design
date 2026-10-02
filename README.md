@@ -18,7 +18,7 @@ Open the printed URL. `npm run build` type-checks and bundles to `dist/`.
 ## Controls
 
 - **Mode buttons** (or keys `1`–`6`): Stow · Drive · Excavate · Transit · Dump · Manual
-- **Sliders**: ladder angle, bed tilt, gate, track speed, hopper fill — moving one switches to Manual
+- **Sliders**: ladder angle, belt floor speed, gate, track speed, hopper fill — moving one switches to Manual
 - **View**: 150×75×75 cm stowed-envelope wireframe, component labels, wireframe shading
 - Drag to orbit, wheel to zoom, right-drag to pan
 - Deep-link: `?mode=Dump&snap&cam=-2.2,1.2,1.8&labels=1`
@@ -29,13 +29,14 @@ Open the printed URL. `npm run build` type-checks and bundles to `dist/`.
 | --- | --- |
 | Mobility | Tracked skid-steer, 2 × BLDC gearmotors, rigid steel cleats on a compliant belt (no pneumatic tires) |
 | Excavation | Bucket ladder: 7 buckets on dual roller chain, 70 cm rails, worm-gear slew at a 56 cm pivot (−60° … 180°). −45° cuts ≈ 10 cm below grade, −60° ≈ 15 cm, bucket tip ≥ 25 cm ahead of the tracks |
-| Transfer | Buckets invert over the top sprocket into a short chute feeding the hopper (no bulldozing) — chute slope is an open trade, see below |
-| Hopper / dump | 55 L (geometric) tip bed, rear hinge, 2 × electric linear actuators, actuator-lifted rear gate |
+| Transfer | Buckets invert over the top sprocket and drop straight into the hopper behind the pivot — no chute, no bulldozing, nothing for cohesive BP‑1 to bridge on |
+| Hopper / dump | Belt‑floor hopper, 85 × 46 × 11 cm bin (≈ 42 L geometric, **~32 L working**, ≈ 50–60 kg BP‑1). Belt runs rearward and meters regolith off the rear roller at 27 cm; one small actuator lifts the top‑hinged rear gate. No tipping load, CG stays low, dump with the ladder still raised |
+| Electronics | Battery + avionics in a sealed e‑bay under the ladder tower; the lid doubles as a spill deflector under the bucket discharge arc |
 | Sensing / comms | Telescoping rear mast: 3D LiDAR, forward stereo pair, rear camera (reverse-to-dump, starting-zone fiducials), mast-head 2×2 MIMO 802.11 client (dual diversity antennas, Ethernet down the mast). Link must work with the mast stowed — setup starts in Stow. |
 | Safety | Ø40 mm red E-stop on top of the slew housing (highest fixed point, outboard of the stowed ladder), 4 marked lifting eyes, COTS power logger on the tower strut at ~0.5 m wired battery → logger → E-stop |
 
-Stowed footprint ≈ 106 × 74 × 73 cm inside the 150 × 75 × 75 cm limit; deployed mast ≈ 160 cm
-(limit 250 cm); mass budget ≈ 62 kg (limit 80 kg).
+Stowed footprint ≈ 108 × 74 × 73 cm inside the 150 × 75 × 75 cm limit; deployed mast ≈ 160 cm
+(limit 250 cm); mass budget ≈ 60 kg (limit 80 kg).
 
 The geometry is a dimensioned concept, not fabrication CAD. Motor sizing, tooth forces,
 tip stability, dust sealing, and controls need independent engineering. Model code lives
@@ -62,20 +63,17 @@ low mass and energy, and dust control — not peak hopper volume.
 | 14.1 | Single 802.11 link, 20 MHz on Ch 1, no amplification, no backchannels | Single stub antenna | 2×2 MIMO client on the mast head, Ethernet down the mast; no second radio (nothing else can reach the MCC) |
 | 16.2 / 13.7.2 | Dump localisation; fiducials allowed on the starting‑zone frame | Forward stereo only | Rear camera on the mast head |
 | — | Model interference | Mast bracket intersected the hopper sidewall/rib | Mast moved outboard to z = −33 cm |
+| 17.1 / 13.4 | Payload vs. mass and tip stability | 55 L tip bed held 60–85 kg of BP‑1 (more than the robot) and lifted it 50° on two actuators | **Belt‑floor hopper**, ~32 L working: discharges rearward at 27 cm with no tipping, no chute, one gate actuator; battery/avionics moved to a sealed e‑bay under the tower |
+| 13.9.8 | Material must actually transfer | 10° chute — BP‑1 (angle of repose > 35°) would bridge | Buckets discharge straight into the bin; the e‑bay lid catches any forward spill |
 
 ### Open design trades (need a decision)
 
-1. **Hopper payload.** 55 L of loosened BP‑1 is ≈ 60–85 kg — more than the 62 kg robot. That drives
-   actuator force, frame stress, tip‑over margin at 50° tilt, track ground pressure and drive energy.
-   Full autonomy only needs ≥ 2 complete cycles and the berm multiplier saturates at 25 L; a
-   **30–35 L** hopper filled in ~1.5–2 min gives 3–4 cycles, a lighter frame and smaller actuators,
-   with similar total berm volume. Recommend shrinking (e.g. bed height 22 → 14 cm).
-2. **Transfer chute.** With the hopper front wall at 42 cm and the bucket swing circle under the pivot,
-   a gravity chute can only slope ~10°. BP‑1 is a cohesive silty powder (angle of repose > 35°); it
-   will bridge on a 10° aluminium chute. Options: (a) drop the hopper front wall and steepen the chute
-   to ≥ 40°; (b) move the hopper forward so buckets discharge straight into it and relocate
-   battery/avionics; (c) replace the tip bed with a **belt‑floor hopper** that discharges rearward —
-   no chute, no tip actuators, lower CG, handles cohesive material. (c) pairs naturally with (1).
+1. ~~Hopper payload~~ — **resolved**: ~32 L working belt‑floor hopper. Full autonomy needs ≥ 2 complete
+   cycles and the berm multiplier saturates at 25 L; ~32 L filled in ~1.5–2 min gives 3–4 cycles with a
+   lighter frame and no tip actuators. Caveat: discharge is only 27 cm above grade, so the berm is built
+   by backing up in steps and relying on the metered belt to pile rather than by dropping from height —
+   verify the pile reaches the scored height, or add a short tail flap to the gate.
+2. ~~Transfer chute~~ — **resolved** by (c): belt floor, discharge straight into the bin.
 3. **Dust points (60 total).** Exposed roller chain, open sprockets and bare actuator rods forfeit most
    of the 30 dust‑tolerant points. Add: chain‑run covers with buckets outside, labyrinth/felt seals on
    drive and slew gearboxes, bellows on the linear actuators (10 pts), and a lunar‑plausible brush or
