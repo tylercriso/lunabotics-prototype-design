@@ -35,6 +35,9 @@ const M = {
   regolith: new THREE.MeshStandardMaterial({ color: 0x8a8378, roughness: 1, metalness: 0 }),
   orange: new THREE.MeshStandardMaterial({ color: 0xff7a1a, metalness: 0.3, roughness: 0.5 }),
   green: new THREE.MeshStandardMaterial({ color: 0x3fbf6f, emissive: 0x1a5c33, roughness: 0.5 }),
+  // dust covers are drawn translucent so the mechanisms they enclose stay readable in the model
+  cover: new THREE.MeshStandardMaterial({ color: 0x9fb4c8, metalness: 0.4, roughness: 0.3, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide }),
+  seal: new THREE.MeshStandardMaterial({ color: 0x4a3f3a, metalness: 0.0, roughness: 0.9 }),
 };
 export const allMaterials = Object.values(M);
 
@@ -110,6 +113,7 @@ const Z_AXIS = new THREE.Vector3(0, 0, 1);
 /** Electric linear actuator: body at `base`, rod extends toward `tip`. */
 class Actuator extends THREE.Group {
   private rod: THREE.Mesh;
+  private bellows: THREE.Mesh[] = [];
   private bodyLen: number;
   constructor(bodyLen: number, r: number) {
     super();
@@ -120,6 +124,14 @@ class Actuator extends THREE.Group {
     eye.position.y = -bodyLen / 2;
     const motor = box(r * 1.6, r * 2.2, r * 1.6, M.aluDark, 0, -bodyLen / 2 + r * 1.6, r * 1.3);
     this.add(body, this.rod, eye, motor);
+    // convoluted rod bellows: rings spread evenly over the exposed rod length
+    const ring = new THREE.TorusGeometry(r * 0.72, r * 0.22, 6, 14);
+    for (let i = 0; i < 7; i++) {
+      const b = new THREE.Mesh(ring, M.seal);
+      b.rotation.x = Math.PI / 2;
+      this.bellows.push(b);
+      this.add(b);
+    }
   }
   /** Endpoints expressed in the actuator's parent space. */
   update(base: THREE.Vector3, tip: THREE.Vector3) {
@@ -131,6 +143,8 @@ class Actuator extends THREE.Group {
     const rodLen = Math.max(0.01, len - this.bodyLen);
     this.rod.scale.y = rodLen;
     this.rod.position.y = this.bodyLen / 2 + rodLen / 2;
+    const n = this.bellows.length;
+    for (let i = 0; i < n; i++) this.bellows[i].position.y = this.bodyLen / 2 + (rodLen * (i + 0.5)) / n;
   }
 }
 
@@ -183,7 +197,8 @@ class Track extends THREE.Group {
   private wheels: THREE.Mesh[] = [];
   private phase = 0;
   private per: number;
-  constructor() {
+  /** `outboard` = sign of Z pointing away from the chassis; the full-height dust cover goes on that side. */
+  constructor(outboard: 1 | -1) {
     super();
     const { trackLen: L, trackR: R, trackW: W } = D;
     this.per = loopPerimeter(L, R);
@@ -207,7 +222,14 @@ class Track extends THREE.Group {
       this.wheels.push(w);
     }
     // side plates of track frame
-    for (const z of [-1, 1]) this.add(box(L + 0.02, 0.07, 0.012, M.alu, L / 2, 0.015, z * (W / 2 + 0.008)));
+    for (const z of [-1, 1]) this.add(box(L + 0.02, 0.07, 0.010, M.alu, L / 2, 0.015, z * (W / 2 + 0.006)));
+    // outboard dust cover over sprockets/idlers/hubs with labyrinth shaft seals — only the cleated belt is exposed
+    this.add(box(L + 2 * R - 0.02, 2 * R - 0.03, 0.004, M.cover, L / 2, 0, outboard * (W / 2 + 0.009)));
+    for (const x of [0, L]) {
+      const seal = cyl(0.036, 0.006, M.seal, 'z');
+      seal.position.set(x, 0, outboard * (W / 2 + 0.008));
+      this.add(seal);
+    }
 
     const cg = new THREE.BoxGeometry(0.03, 0.022, W + 0.01);
     for (let i = 0; i < 26; i++) {
@@ -254,7 +276,7 @@ class Ladder extends THREE.Group {
     }
     for (const x of [0.14, L * 0.55, L - 0.04]) {
       const cm = cyl(0.011, Z * 2, M.alu, 'z');
-      cm.position.set(x, R + 0.02, 0);
+      cm.position.set(x, R + 0.032, 0);
       this.add(cm);
     }
     for (const x of [0, L]) {
@@ -271,6 +293,13 @@ class Ladder extends THREE.Group {
     for (const z of [-chainZ, chainZ]) {
       this.add(box(L, 0.014, 0.012, M.steel, L / 2, R, z));
       this.add(box(L, 0.014, 0.012, M.steel, L / 2, -R, z));
+      // chain-run cover: C-channel around each chain strand; buckets hang on link ears outside the channel slot
+      this.add(box(L, 2 * R + 0.03, 0.03, M.cover, L / 2, 0, z));
+      for (const x of [0, L]) {
+        const cap = cyl(R + 0.016, 0.03, M.cover, 'z', 24);
+        cap.position.set(x, 0, z);
+        this.add(cap);
+      }
     }
     // chain drive motor + gearbox on the top shaft, outboard of the rail
     const gb = box(0.08, 0.08, 0.05, M.aluDark, 0, 0, Z + 0.045);
@@ -341,8 +370,11 @@ class BeltFloor extends THREE.Group {
     }
     // belt drive gearmotor on the rear roller, outboard of the +Z rail
     const motor = cyl(0.025, 0.08, M.black, 'z');
-    motor.position.set(0, 0, D.hopZ + 0.075);
-    this.add(motor);
+    motor.position.set(0, 0, D.hopZ + 0.09);
+    const housing = box(0.07, 0.07, 0.08, M.aluDark, 0, 0, D.hopZ + 0.09);
+    const seal = cyl(r + 0.004, 0.008, M.seal, 'z');
+    seal.position.set(0, 0, D.hopZ + 0.02);
+    this.add(motor, housing, seal);
     const lg = new THREE.BoxGeometry(0.012, 0.01, w - 0.02);
     for (let i = 0; i < 14; i++) {
       const l = new THREE.Mesh(lg, M.steel);
@@ -372,8 +404,8 @@ class BeltFloor extends THREE.Group {
 
 // ---------- complete robot ----------
 export class Robot extends THREE.Group {
-  private trackL = new Track();
-  private trackR = new Track();
+  private trackL = new Track(-1);
+  private trackR = new Track(1);
   private ladderPivot = new THREE.Group();
   private ladder = new Ladder();
   private belt = new BeltFloor();
@@ -381,6 +413,7 @@ export class Robot extends THREE.Group {
   private gateAct = new Actuator(0.09, 0.013);
   private mastInner: THREE.Mesh;
   private mastHead = new THREE.Group();
+  private wiper = new THREE.Group();
   private fillMesh: THREE.Mesh;
   readonly labels: THREE.Object3D[] = [];
   readonly envelope: THREE.LineSegments;
@@ -395,11 +428,16 @@ export class Robot extends THREE.Group {
     this.trackR.position.set(TX, R, TZ);
     this.add(this.trackL, this.trackR);
     for (const z of [-1, 1]) {
+      const mz = z * (TZ - D.trackW / 2 - 0.075);
       const m = cyl(0.035, 0.12, M.black, 'z');
-      m.position.set(TX, R, z * (TZ - D.trackW / 2 - 0.075));
-      this.add(m);
+      m.position.set(TX, R, mz);
+      // sealed gearmotor housing inboard of the track, shaft seal at the track frame
+      const housing = box(0.10, 0.10, 0.14, M.aluDark, TX, R, mz);
+      const seal = cyl(0.03, 0.01, M.seal, 'z');
+      seal.position.set(TX, R, z * (TZ - D.trackW / 2 - 0.003));
+      this.add(m, housing, seal);
     }
-    this.labels.push(label('Tracked skid-steer drive (2× BLDC gearmotors)', new THREE.Vector3(TX, 0.02, TZ + 0.1)));
+    this.labels.push(label('Tracked skid-steer drive: 2× BLDC gearmotors in sealed housings, enclosed sprockets', new THREE.Vector3(TX, 0.02, TZ + 0.1)));
 
     // ---- main frame: 40×40 extrusion ----
     const L = fx1 - fx0;
@@ -435,7 +473,9 @@ export class Robot extends THREE.Group {
       this.add(strut(new THREE.Vector3(0.24, deck, zb), new THREE.Vector3(P.x, P.y, z), 0.016, M.alu));
       const brg = cyl(0.035, 0.03, M.aluDark, 'z');
       brg.position.set(P.x, P.y, z);
-      this.add(brg);
+      const lab = cyl(0.04, 0.012, M.seal, 'z'); // labyrinth/felt seal on the pivot bearing
+      lab.position.set(P.x, P.y, z - Math.sign(z) * 0.021);
+      this.add(brg, lab);
     }
     const crossbar = cyl(0.012, tz * 2, M.alu, 'z');
     crossbar.position.set(0.32, 0.40, 0);
@@ -482,6 +522,10 @@ export class Robot extends THREE.Group {
     }
     this.add(box(sh, hh + hr, hz * 2, M.alu, hx1 + hr, floorY - hr / 2 + hh / 2, 0)); // front wall
     this.labels.push(label('Belt-floor hopper (~32 L working, rear discharge)', new THREE.Vector3(-0.2, 0.50, 0)));
+    // discharge side shields: extend the sidewalls forward past the pivot (outside the bucket swing)
+    // so inverted buckets spill into the bin, not onto the deck — "transfer without dumping on the robot"
+    for (const z of [-0.236, 0.236]) this.add(box(0.235, 0.12, sh, M.cover, 0.3225, 0.41, z));
+    this.labels.push(label('Discharge side shields + e-bay lid deflector', new THREE.Vector3(0.32, 0.56, 0.30)));
 
     this.fillMesh = box(hl - 0.03, 1, hz * 2 - 0.02, M.regolith, hcx, floorY + 0.002, 0);
     this.fillMesh.geometry.translate(0, 0.5, 0);
@@ -493,7 +537,7 @@ export class Robot extends THREE.Group {
     this.gatePivot.add(cyl(0.011, hz * 2 + 0.02, M.steel, 'z'));
     this.gatePivot.add(box(0.012, 0.03, 0.03, M.steel, -0.006, -0.07, hz + 0.02)); // actuator lug
     this.add(this.gatePivot, this.gateAct);
-    this.labels.push(label('Actuated rear gate', new THREE.Vector3(hx0 - 0.05, floorY + hh + 0.08, hz + 0.05)));
+    this.labels.push(label('Actuated rear gate (bellows-sealed actuator)', new THREE.Vector3(hx0 - 0.05, floorY + hh + 0.08, hz + 0.05)));
 
     // ---- lifting points ----
     for (const x of [fx0 + 0.07, fx1 - 0.07]) for (const z of [-fz, fz]) {
@@ -512,6 +556,9 @@ export class Robot extends THREE.Group {
     const mastBase = cyl(0.025, 0.26, M.alu, 'y');
     mastBase.position.set(mp.x, fy + 0.045 + 0.13, mp.z);
     this.add(mastBase);
+    const mastSeal = cyl(0.03, 0.016, M.seal, 'y'); // wiper seal where the inner tube telescopes out
+    mastSeal.position.set(mp.x, fy + 0.045 + 0.26, mp.z);
+    this.add(mastSeal);
     this.mastInner = cyl(0.016, 1, M.aluDark, 'y');
     this.mastInner.geometry.translate(0, 0.5, 0);
     this.mastInner.position.set(mp.x, fy + 0.045 + 0.26 - 0.02, mp.z);
@@ -539,7 +586,20 @@ export class Robot extends THREE.Group {
       ant.position.set(-0.04, 0.095, z);
       this.mastHead.add(ant);
     }
-    const headLabel = label('3D LiDAR + stereo + rear camera + 2×2 MIMO 2.4/5 GHz radio', new THREE.Vector3(0, 0.18, 0));
+    // Active dust control: a slow rotary brush sweeps the LiDAR window band and the three camera lenses
+    // (mechanical brushing is lunar-plausible; compressed air is prohibited and lens cleaning must use a lunar-suitable process, §13.8.1).
+    const wiperMotor = cyl(0.014, 0.02, M.black, 'y');
+    wiperMotor.position.y = 0.04;
+    this.mastHead.add(wiperMotor);
+    const arm = box(0.004, 0.004, 0.062, M.alu, 0, 0.03, 0.031);
+    const brush = box(0.006, 0.06, 0.008, M.seal, 0, -0.005, 0.058);
+    this.wiper.add(arm, brush);
+    this.mastHead.add(this.wiper);
+    for (const [x, z] of [[0.07, -0.09], [0.07, 0.09], [-0.045, 0]] as const) {
+      const blade = box(0.004, 0.032, 0.006, M.seal, x, -0.055, z); // lens wiper blades, cammed off the brush shaft
+      this.mastHead.add(blade);
+    }
+    const headLabel = label('3D LiDAR + stereo + rear camera + 2×2 MIMO radio; rotary lens brush', new THREE.Vector3(0, 0.18, 0));
     this.mastHead.add(headLabel);
     this.labels.push(headLabel);
     this.add(this.mastHead);
@@ -575,7 +635,8 @@ export class Robot extends THREE.Group {
 
     this.fillMesh.scale.y = Math.max(0.001, pose.fill * (D.hopH - 0.015));
 
-    // telescoping mast
+    // telescoping mast; lens brush runs whenever the mast is deployed
+    if (pose.mast > 0.5) this.wiper.rotation.y += 1.2 * dt;
     const ext = 0.04 + pose.mast * 0.8;
     this.mastInner.scale.y = ext;
     const mp = D.mastPos;
